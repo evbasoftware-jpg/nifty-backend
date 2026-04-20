@@ -1,64 +1,38 @@
 const express = require("express");
-const axios = require("axios");
+const yahooFinance = require("yahoo-finance2").default;
 const cors = require("cors");
-const mongoose = require("mongoose");
-const bcrypt = require("bcryptjs");
-const jwt = require("jsonwebtoken");
 
 const app = express();
 app.use(cors());
-app.use(express.json());
 
-// MongoDB connect
-mongoose.connect("mongodb://127.0.0.1:27017/saas");
-
-// User model
-const User = mongoose.model("User", {
-    email: String,
-    password: String,
-    plan: { type: String, default: "free" }
+// Home route
+app.get("/", (req, res) => {
+    res.send("✅ Nifty Backend Running");
 });
 
-// 🔐 Register
-app.post("/register", async (req, res) => {
-    const hash = await bcrypt.hash(req.body.password, 10);
-    const user = new User({ email: req.body.email, password: hash });
-    await user.save();
-    res.json({ msg: "Registered" });
-});
-
-// 🔐 Login
-app.post("/login", async (req, res) => {
-    const user = await User.findOne({ email: req.body.email });
-    if (!user) return res.json({ error: "User not found" });
-
-    const valid = await bcrypt.compare(req.body.password, user.password);
-    if (!valid) return res.json({ error: "Wrong password" });
-
-    const token = jwt.sign({ id: user._id }, "secret");
-    res.json({ token });
-});
-
-// 📊 Market Data API
-app.get("/data", async (req, res) => {
+// API route
+app.get("/nifty", async (req, res) => {
     try {
-        let symbol = req.query.symbol || "^NSEI";
+        const result = await yahooFinance.chart("^NSEI", {
+            interval: "5m",
+            range: "1d"
+        });
 
-        let url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=5m&range=1d`;
-
-        let r = await axios.get(url);
-
-        let result = r.data.chart.result[0];
-        let prices = result.indicators.quote[0].close.filter(x => x);
+        const prices = result.indicators.quote[0].close.filter(x => x);
 
         res.json({
             price: prices[prices.length - 1],
             prices: prices
         });
 
-    } catch {
-        res.json({ error: "API error" });
+    } catch (e) {
+        res.status(500).json({ error: "Data fetch error" });
     }
 });
 
-app.listen(10000, () => console.log("SaaS API running 🚀"));
+// IMPORTANT: PORT fix
+const PORT = process.env.PORT || 10000;
+
+app.listen(PORT, () => {
+    console.log("Server running on port", PORT);
+});
